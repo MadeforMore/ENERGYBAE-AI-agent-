@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Energybae Bill Automation</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="page-shell">
+    <section class="hero-card">
+      <div class="eyebrow">Energybae AI Internship Task</div>
+      <h1>Electricity Bill to Excel Automation</h1>
+      <p class="hero-copy">
+        Upload one or two bills, extract the fields with AI, review the result, and generate the final Excel file without changing any formulas.
+      </p>
+      <div class="hero-meta">
+        <span>Supported: PDF, JPG, JPEG, PNG</span>
+        <span>Upload Limit: {{ max_upload_bills }} bills</span>
+        <span>AI Provider: {{ ai_provider }}</span>
+      </div>
+    </section>
+
+    <section class="panel-grid">
+      <article class="card">
+        <div class="card-header">
+          <h2>1. Upload Bill</h2>
+          <p>Use the same template that was analyzed from the provided files. You can upload up to 5 bills.</p>
+        </div>
+        <div class="status-inline">
+          <span class="mini-pill {{ 'ok-pill' if gemini_configured else '' }}">Gemini {{ 'configured' if gemini_configured else 'not configured' }}</span>
+          <span class="mini-pill {{ 'ok-pill' if openai_configured else '' }}">OpenAI {{ 'configured' if openai_configured else 'not configured' }}</span>
+          <span class="mini-pill ok-pill">Sample fallback available</span>
+        </div>
+        <input id="fileInput" type="file" accept=".pdf,.png,.jpg,.jpeg" multiple>
+        <div class="action-row">
+          <button id="extractButton" class="primary">Extract Data</button>
+          <button id="resetButton" class="ghost">Reset</button>
+        </div>
+        <div id="statusBox" class="status-box"></div>
+      </article>
+
+      <article class="card">
+        <div class="card-header">
+          <h2>2. Bill Preview</h2>
+          <p>Preview stays client-side for speed while the backend extracts the data.</p>
+        </div>
+        <div id="previewGrid" class="preview-grid"></div>
+      </article>
+    </section>
+
+    <section class="card wide-card">
+      <div class="card-header">
+        <h2>3. Review Extracted Data</h2>
+        <p>Edit uncertain fields before generating the Excel output.</p>
+      </div>
+      <div class="panel-setting">
+        <label for="panelWattage">Solar panel wattage</label>
+        <input id="panelWattage" type="number" value="600" step="1">
+      </div>
+      <div id="assumptionBox" class="assumption-box"></div>
+      <div id="resultsRoot" class="results-root"></div>
+      <div class="action-row">
+        <button id="generateButton" class="primary" disabled>Generate Excel</button>
+      </div>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
