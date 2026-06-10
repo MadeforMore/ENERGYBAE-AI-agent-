@@ -52,9 +52,15 @@ class GenerateWorkbookRequest(BaseModel):
     panel_wattage: float = 600.0
 
 
+class ExtractionFailure(BaseModel):
+    source_name: str
+    message: str
+
+
 class ExtractResponse(BaseModel):
     bills: list[BillExtraction]
     assumptions: list[str] = Field(default_factory=list)
+    errors: list[ExtractionFailure] = Field(default_factory=list)
 
 
 class WorkbookBuildResult(BaseModel):

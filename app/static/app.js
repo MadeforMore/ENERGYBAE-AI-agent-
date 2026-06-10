@@ -1,6 +1,7 @@
 const state = {
   bills: [],
   assumptions: [],
+  errors: [],
 };
 
 const fileInput = document.getElementById("fileInput");
@@ -73,9 +74,16 @@ async function handleExtract() {
 
     state.bills = data.bills || [];
     state.assumptions = data.assumptions || [];
+    state.errors = data.errors || [];
     renderAssumptions();
     renderResults();
-    setStatus("Extraction completed. Review the fields below before export.");
+    if (state.bills.length && state.errors.length) {
+      setStatus("Some bills were extracted successfully, but some files failed. Review the messages below.", true);
+    } else if (state.bills.length) {
+      setStatus("Extraction completed. Review the fields below before export.");
+    } else {
+      setStatus("No bill could be extracted. Review the error messages below and try again.", true);
+    }
     generateButton.disabled = state.bills.length === 0;
   } catch (error) {
     setStatus(error.message, true);
@@ -86,13 +94,19 @@ async function handleExtract() {
 
 function renderAssumptions() {
   assumptionBox.innerHTML = "";
-  if (!state.assumptions.length) {
+  if (!state.assumptions.length && !state.errors.length) {
     return;
   }
   const list = document.createElement("ul");
   state.assumptions.forEach((item) => {
     const li = document.createElement("li");
     li.textContent = item;
+    list.appendChild(li);
+  });
+  state.errors.forEach((item) => {
+    const li = document.createElement("li");
+    li.textContent = `${item.source_name}: ${item.message}`;
+    li.style.color = "var(--warn)";
     list.appendChild(li);
   });
   assumptionBox.appendChild(list);
@@ -307,6 +321,7 @@ function resetAll() {
   assumptionBox.innerHTML = "";
   state.bills = [];
   state.assumptions = [];
+  state.errors = [];
   generateButton.disabled = true;
   setStatus("");
 }

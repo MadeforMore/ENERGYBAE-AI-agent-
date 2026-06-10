@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 
 from app.config import settings
-from app.models.schema import ExtractResponse, GenerateWorkbookRequest
+from app.models.schema import ExtractResponse, ExtractionFailure, GenerateWorkbookRequest
 from app.services.excel_service import build_workbooks
 from app.services.extraction_service import ExtractionError, extract_bill
 from app.services.file_service import save_upload
@@ -42,6 +42,7 @@ async def extract(files: list[UploadFile] = File(...)) -> ExtractResponse:
         )
 
     bills = []
+    errors: list[ExtractionFailure] = []
     assumptions: list[str] = []
 
     for upload in files:
@@ -49,11 +50,16 @@ async def extract(files: list[UploadFile] = File(...)) -> ExtractResponse:
             saved = await save_upload(upload)
             bills.append(extract_bill(saved))
         except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+            errors.append(ExtractionFailure(source_name=upload.filename or "upload", message=str(exc)))
         except ExtractionError as exc:
-            raise HTTPException(status_code=422, detail=str(exc)) from exc
+            errors.append(ExtractionFailure(source_name=upload.filename or "upload", message=str(exc)))
         except Exception as exc:  # pragma: no cover
-            raise HTTPException(status_code=500, detail=f"Failed to process {upload.filename}: {exc}") from exc
+            errors.append(
+                ExtractionFailure(
+                    source_name=upload.filename or "upload",
+                    message=f"Failed to process file: {exc}",
+                )
+            )
 
     assumptions.append(
         "If the Excel-specific bill amount is not found, the visible payable amount is used as a fallback."
@@ -67,7 +73,14 @@ async def extract(files: list[UploadFile] = File(...)) -> ExtractResponse:
     assumptions.append(
         "The exact provided sample bill images can be extracted locally even without an API key."
     )
-    return ExtractResponse(bills=bills, assumptions=assumptions)
+    assumptions.append(
+        "For new bill images, the app retries Gemini automatically and tries fallback Gemini models when the service is busy."
+    )
+    if not bills and errors:
+        assumptions.append(
+            "No bill was extracted successfully. Review the error messages below and try again."
+        )
+    return ExtractResponse(bills=bills, assumptions=assumptions, errors=errors)
 
 
 @router.post("/api/generate")

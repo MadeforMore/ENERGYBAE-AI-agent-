@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import base64
 import json
+import time
 
 from google import genai
+from google.genai.errors import APIError, ClientError, ServerError
 from google.genai import types
 from openai import OpenAI
 
@@ -116,24 +118,53 @@ def extract_with_gemini(upload: SavedUpload) -> BillExtraction:
             )
         )
 
-    response = client.models.generate_content(
-        model=settings.gemini_model,
-        contents=contents,
-        config=types.GenerateContentConfig(
-            temperature=0,
-            response_mime_type="application/json",
-        ),
+    models_to_try = [settings.gemini_model]
+    models_to_try.extend(
+        model for model in settings.gemini_fallback_models if model not in models_to_try
     )
 
-    payload = response.text or ""
-    data = parse_json_payload(payload)
-    bills = data.get("bills") or []
-    if not bills:
-        raise ExtractionError("Gemini response did not contain any bill records.")
+    last_error: Exception | None = None
 
-    first_bill = dict(bills[0])
-    first_bill["source_name"] = upload.source_name
-    return BillExtraction(**first_bill)
+    for model_name in models_to_try:
+        for attempt in range(1, settings.extraction_max_retries + 1):
+            try:
+                response = client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=types.GenerateContentConfig(
+                        temperature=0,
+                        response_mime_type="application/json",
+                    ),
+                )
+
+                payload = response.text or ""
+                data = parse_json_payload(payload)
+                bills = data.get("bills") or []
+                if not bills:
+                    raise ExtractionError(
+                        f"Gemini model {model_name} returned no bill records."
+                    )
+
+                first_bill = dict(bills[0])
+                first_bill["source_name"] = upload.source_name
+                extraction = BillExtraction(**first_bill)
+                extraction.raw_notes.append(f"Extracted with Gemini model: {model_name}")
+                return extraction
+            except (ServerError, APIError) as exc:
+                last_error = exc
+                if not is_retryable_gemini_error(exc):
+                    break
+                if attempt == settings.extraction_max_retries:
+                    break
+                time.sleep(settings.extraction_retry_delay_seconds * attempt)
+            except (ClientError, json.JSONDecodeError, ValueError) as exc:
+                last_error = exc
+                break
+            except Exception as exc:  # pragma: no cover
+                last_error = exc
+                break
+
+    raise ExtractionError(build_gemini_error_message(last_error))
 
 
 def extract_with_openai(upload: SavedUpload) -> BillExtraction:
@@ -175,3 +206,43 @@ def parse_json_payload(payload: str) -> dict:
     if cleaned.startswith("json"):
         cleaned = cleaned[4:].strip()
     return json.loads(cleaned)
+
+
+def is_retryable_gemini_error(exc: Exception) -> bool:
+    text = str(exc).lower()
+    status_code = getattr(exc, "status_code", None)
+    code = getattr(exc, "code", None)
+    return (
+        status_code in {429, 500, 502, 503, 504}
+        or code in {429, 500, 502, 503, 504}
+        or "503" in text
+        or "unavailable" in text
+        or "overloaded" in text
+        or "high demand" in text
+        or "rate limit" in text
+    )
+
+
+def build_gemini_error_message(last_error: Exception | None) -> str:
+    if last_error is None:
+        return (
+            "Gemini extraction failed. Please try again, switch to another Gemini model, "
+            "or use a clearer bill image."
+        )
+
+    text = str(last_error)
+    lowered = text.lower()
+    if "503" in lowered or "unavailable" in lowered or "high demand" in lowered:
+        return (
+            "Gemini is temporarily overloaded for this bill image. The app already retried and "
+            "tried fallback models. Please try again after a minute or use a clearer image."
+        )
+    if "429" in lowered or "rate limit" in lowered:
+        return (
+            "Gemini rate limit was reached. Wait a little and try again, or use a different API key."
+        )
+    if "json" in lowered:
+        return (
+            "The AI returned an unreadable extraction response. Please retry with a clearer bill image."
+        )
+    return f"Gemini extraction failed: {text}"
