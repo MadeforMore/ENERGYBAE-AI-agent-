@@ -151,6 +151,7 @@ pytest
 - Vercel uses a read-only project filesystem at runtime.
 - Temporary writable storage must use `/tmp`.
 - This project now auto-switches `OUTPUT_DIR` and `TEMP_DIR` to `/tmp/...` on Vercel when those paths are not absolute.
+- Vercel Python Functions should live under `api/`, so this project exposes the FastAPI app through `api/index.py` and rewrites all routes to that function.
 
 Recommended Vercel environment variables:
 
