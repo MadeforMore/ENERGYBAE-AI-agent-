@@ -146,6 +146,27 @@ pytest
 - Run with `uvicorn`
 - Store generated files in `generated/`
 
+### Vercel
+
+- Vercel uses a read-only project filesystem at runtime.
+- Temporary writable storage must use `/tmp`.
+- This project now auto-switches `OUTPUT_DIR` and `TEMP_DIR` to `/tmp/...` on Vercel when those paths are not absolute.
+
+Recommended Vercel environment variables:
+
+```text
+AI_PROVIDER=gemini
+GEMINI_API_KEY=your_key
+GEMINI_MODEL=gemini-2.5-flash
+GEMINI_FALLBACK_MODELS=gemini-2.5-flash-lite,gemini-2.0-flash
+EXTRACTION_MAX_RETRIES=3
+EXTRACTION_RETRY_DELAY_SECONDS=2
+OUTPUT_DIR=/tmp/generated
+TEMP_DIR=/tmp/uploads
+TEMPLATE_PATH=assets/template.xlsx
+MAX_UPLOAD_BILLS=5
+```
+
 ### Production
 
 - Containerize with Docker
